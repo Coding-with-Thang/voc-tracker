@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+model User {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  clerkId String @unique
+  username String @unique
+  voiceName String @unique
+  firstName String
+  lastName String
+  manager String? @default("")
+  role Role @default(AGENT)
+  createdAt DateTime @updatedAt
+  surveys Survey[]
+
+  @@map("users")
+}
+
+model Survey {
+  id String @id @default(auto()) @map("_id") @db.ObjectId
+  userId String @db.ObjectId
+  user User @relation(fields: [userId], references: [id])
+  comment String?
+  AHT String
+  voiceName String
+  date DateTime
+  CSAT Int
+
+  @@unique([userId, comment, AHT, CSAT]) //Prevents duplicate surveys to be added into DB
+}
+
+enum Role {
+  AGENT
+  MANAGER
+  OPERATIONS
+}
