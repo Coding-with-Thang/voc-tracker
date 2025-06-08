@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "git satston";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import useSurveyStore from "@/app/store/surveyStore";
 
