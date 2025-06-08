@@ -1,6 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { getAuth } from "@clerk/nextjs/server";
-import * as XLSX from "xlsx";
+import { read, utils } from "xlsx";
 import { NextResponse } from "next/server";
 
 const prisma = new PrismaClient();
@@ -62,9 +62,9 @@ export async function POST(req) {
 
     // Convert the file to array buffer
     const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(new Uint8Array(buffer));
+    const workbook = read(new Uint8Array(buffer));
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-    const data = XLSX.utils.sheet_to_json(worksheet);
+    const data = utils.sheet_to_json(worksheet);
 
     const results = {
       success: 0,
