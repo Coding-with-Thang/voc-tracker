@@ -1,4 +1,3 @@
-// store/surveyStore.js
 import { create } from "zustand";
 
 const useSurveyStore = create((set, get) => ({
@@ -49,7 +48,7 @@ const useSurveyStore = create((set, get) => ({
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("/api/upload-surveys", {
+      const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
       });

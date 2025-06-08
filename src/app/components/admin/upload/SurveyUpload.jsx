@@ -1,11 +1,9 @@
-// components/SurveyUpload.js
-import { useState } from 'react';
-import { useUser } from '@clerk/nextjs';
-import useSurveyStore from '../store/surveyStore';
+'use client';
+
+import useSurveyStore from '../../../store/surveyStore';
 
 function SurveyUpload() {
   const { uploadSurveys, isLoading, error, uploadStatus, clearUploadStatus } = useSurveyStore();
-  const { user } = useUser();
 
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];

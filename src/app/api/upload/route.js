@@ -1,58 +1,68 @@
-// pages/api/upload-surveys.js
 import { PrismaClient } from "@prisma/client";
 import { getAuth } from "@clerk/nextjs/server";
 import * as XLSX from "xlsx";
-import formidable from "formidable";
-import { promises as fs } from "fs";
 import { NextResponse } from "next/server";
-
-export const config = {
-  api: {
-    bodyParser: {
-      sizeLimit: "10mb",
-    },
-  },
-};
 
 const prisma = new PrismaClient();
 
 export async function POST(req) {
   try {
-    if (!req.body) {
+    // Verify user is admin/manager
+    const { userId } = await getAuth(req);
+
+    if (!userId) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          details: "No user ID found",
+        },
+        { status: 403 }
+      );
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { clerkId: userId },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          details: "User not found in database",
+        },
+        { status: 403 }
+      );
+    }
+
+    if (user.role !== "MANAGER" && user.role !== "OPERATIONS") {
+      return NextResponse.json(
+        {
+          error: "Unauthorized",
+          details: `User role '${user.role}' not authorized. Required: MANAGER or OPERATIONS`,
+        },
+        { status: 403 }
+      );
+    }
+
+    // Get the form data
+    const formData = await req.formData();
+    const file = formData.get("file");
+
+    if (!file) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    const contentLength = req.headers.get("content-length");
-    if (contentLength > 10 * 1024 * 1024) {
-      // 10MB limit
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json(
         { error: "File size too large. Maximum size is 10MB" },
         { status: 413 }
       );
     }
 
-    // Verify user is admin/manager
-    const { userId } = await getAuth(req);
-    const user = await prisma.user.findUnique({
-      where: { clerkId: userId },
-    });
-
-    if (!user || (user.role !== "MANAGER" && user.role !== "OPERATIONS")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
-    }
-
-    // Parse the uploaded file
-    const form = formidable();
-    const [fields, files] = await form.parse(req);
-    const file = files.file?.[0];
-
-    if (!file) {
-      return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
-
-    // Read the Excel file
-    const fileData = await fs.readFile(file.filepath);
-    const workbook = XLSX.read(fileData);
+    // Convert the file to array buffer
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(buffer));
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = XLSX.utils.sheet_to_json(worksheet);
 
@@ -119,11 +129,9 @@ export async function POST(req) {
       }
     }
 
-    // Clean up temp file
-    await fs.unlink(file.filepath);
-
     return NextResponse.json(results);
   } catch (error) {
+    console.error("Upload error:", error);
     return NextResponse.json(
       { error: "Server error", details: error.message },
       { status: 500 }

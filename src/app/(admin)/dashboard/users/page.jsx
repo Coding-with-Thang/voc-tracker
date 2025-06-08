@@ -1,9 +1,6 @@
-import { useUser } from '@clerk/nextjs';
-import VoiceNameManager from '../../components/admin/VoiceNameManager';
+import VoiceNameManager from '../../../components/admin/users/VoiceNameManager';
 
-function AdminDashboard() {
-  const { user } = useUser();
-
+function UsersDashboardPage() {
   return (
     <div className="container mx-auto px-4 py-8">
       <h1 className="text-3xl font-bold mb-8">Admin Dashboard</h1>
@@ -14,4 +11,4 @@ function AdminDashboard() {
   );
 }
 
-export default AdminDashboard;
+export default UsersDashboardPage;

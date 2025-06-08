@@ -16,7 +16,6 @@ import {
     SidebarRail,
 } from "@/components/ui/sidebar"
 
-// This is sample data.
 const data = {
     user: {
         name: "thang_nguyen",
@@ -36,7 +35,7 @@ const data = {
         },
         {
             title: "Data",
-            url: "dashboard",
+            url: "/dashboard",
             icon: SquareTerminal,
             isActive: true,
             items: [
@@ -47,6 +46,14 @@ const data = {
                 {
                     title: "View Data",
                     url: "/dashboard/view-data",
+                },
+                {
+                    title: "VOC Data",
+                    url: "/dashboard/voc",
+                },
+                {
+                    title: "Survey Excel Upload (New)",
+                    url: "/dashboard/data",
                 },
 
             ],
@@ -67,6 +74,20 @@ const data = {
                 {
                     title: "View All",
                     url: "#",
+                },
+            ],
+        },
+        {
+            title: "Users",
+            url: "/dashboard/users",
+            items: [
+                {
+                    title: "Voice Name Manager",
+                    url: "/dashboard/users/voice-name-manager",
+                },
+                {
+                    title: "User Management",
+                    url: "/dashboard/users/user-management",
                 },
             ],
         },

@@ -1,9 +1,6 @@
-// pages/admin/dashboard.js
-import { useUser } from '@clerk/nextjs';
-import SurveyUpload from '../../components/admin/SurveyUpload';
+import SurveyUpload from '../../../components/admin/upload/SurveyUpload';
 
 function SurveyUploadPage() {
-  const { user } = useUser();
 
   return (
     <div className="container mx-auto px-4 py-8">
