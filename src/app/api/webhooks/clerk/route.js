@@ -69,16 +69,37 @@ async function handler(req) {
   if (eventType === "user.updated") {
     // Update user in your database
     try {
-      await prisma.user.update({
+      const user = await prisma.user.findUnique({
         where: { clerkId: evt.data.id },
-        data: {
-          username:
-            evt.data.username || evt.data.email_addresses[0].email_address,
-          firstName: evt.data.first_name,
-          lastName: evt.data.last_name,
-          role: evt.data.public_metadata?.role || "AGENT",
-        },
       });
+
+      if (!user) {
+        // Create user if they don't exist
+        await prisma.user.create({
+          data: {
+            clerkId: evt.data.id,
+            username:
+              evt.data.username || evt.data.email_addresses[0].email_address,
+            firstName: evt.data.first_name,
+            lastName: evt.data.last_name,
+            role: evt.data.public_metadata?.role || "AGENT",
+            voiceName: "", // Default empty voice name
+            createdAt: new Date(),
+          },
+        });
+      } else {
+        // Update existing user
+        await prisma.user.update({
+          where: { clerkId: evt.data.id },
+          data: {
+            username:
+              evt.data.username || evt.data.email_addresses[0].email_address,
+            firstName: evt.data.first_name,
+            lastName: evt.data.last_name,
+            role: evt.data.public_metadata?.role || "AGENT",
+          },
+        });
+      }
     } catch (error) {
       console.error("Error updating user:", error);
       return new Response("Error updating user", { status: 500 });
