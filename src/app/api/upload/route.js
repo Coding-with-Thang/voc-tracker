@@ -2,10 +2,11 @@ import { PrismaClient } from "@prisma/client";
 import { getAuth } from "@clerk/nextjs/server";
 import { read, utils } from "xlsx";
 import { NextResponse } from "next/server";
+import { uploadToS3, createUploadJob } from "@/app/utils/aws";
 
 const prisma = new PrismaClient();
 
-const BATCH_SIZE = 50; // Process records in batches of 50
+const CHUNK_SIZE = 5000; // Number of rows to process in each chunk
 
 export async function POST(req) {
   try {
@@ -54,21 +55,21 @@ export async function POST(req) {
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
     }
 
-    // Check file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
+    // Check file size (50MB limit for large files)
+    if (file.size > 50 * 1024 * 1024) {
       return NextResponse.json(
-        { error: "File size too large. Maximum size is 10MB" },
+        { error: "File size too large. Maximum size is 50MB" },
         { status: 413 }
       );
     }
 
-    // Convert the file to array buffer
+    // Convert the file to array buffer and do initial validation
     const buffer = await file.arrayBuffer();
     const workbook = read(new Uint8Array(buffer));
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = utils.sheet_to_json(worksheet);
 
-    // Validate the data structure first
+    // Validate the data structure
     const invalidRows = data.filter(
       (row) => !row.voiceName || !row.AHT || !row.CSAT || !row.date
     );
@@ -77,88 +78,34 @@ export async function POST(req) {
         {
           error: "Invalid data format",
           details: "Some rows are missing required fields",
-          invalidRows,
+          invalidRows: invalidRows.slice(0, 10), // Only show first 10 invalid rows
         },
         { status: 400 }
       );
     }
 
-    // Get all unique voice names from the data
-    const uniqueVoiceNames = [...new Set(data.map((row) => row.voiceName))];
+    // Upload file to S3
+    const s3Key = await uploadToS3(buffer, file.name);
 
-    // Fetch all users with these voice names in one query
-    const users = await prisma.user.findMany({
-      where: {
-        voiceName: {
-          in: uniqueVoiceNames,
-        },
+    // Create upload job
+    const uploadJob = await prisma.uploadJob.create({
+      data: {
+        userId: user.id,
+        s3Key,
+        status: "QUEUED",
+        totalRows: data.length,
+        progress: 0,
       },
     });
 
-    // Create a map for quick user lookup
-    const userMap = new Map(users.map((user) => [user.voiceName, user]));
+    // Queue the processing job
+    await createUploadJob(user.id, s3Key, data.length);
 
-    const results = {
-      success: 0,
-      skipped: 0,
-      errors: [],
-    };
-
-    // Process data in batches
-    for (let i = 0; i < data.length; i += BATCH_SIZE) {
-      const batch = data.slice(i, i + BATCH_SIZE);
-      const batchOperations = [];
-
-      for (const row of batch) {
-        const targetUser = userMap.get(row.voiceName);
-
-        if (!targetUser) {
-          results.errors.push(
-            `No user found with voice name: ${row.voiceName}`
-          );
-          continue;
-        }
-
-        try {
-          // Prepare the survey data
-          const surveyData = {
-            userId: targetUser.id,
-            voiceName: row.voiceName,
-            AHT: row.AHT,
-            CSAT: Number(row.CSAT),
-            date: new Date(row.date),
-            comment: row.comment || null,
-          };
-
-          // Add operation to batch
-          batchOperations.push(
-            prisma.survey.upsert({
-              where: {
-                userId_date: {
-                  userId: targetUser.id,
-                  date: surveyData.date,
-                },
-              },
-              update: surveyData,
-              create: surveyData,
-            })
-          );
-        } catch (error) {
-          results.errors.push(`Error processing row: ${error.message}`);
-        }
-      }
-
-      // Execute batch operations
-      try {
-        const batchResults = await prisma.$transaction(batchOperations);
-        results.success += batchResults.length;
-      } catch (error) {
-        console.error("Batch processing error:", error);
-        results.errors.push(`Batch processing error: ${error.message}`);
-      }
-    }
-
-    return NextResponse.json(results);
+    return NextResponse.json({
+      jobId: uploadJob.id,
+      message: "File uploaded successfully and queued for processing",
+      totalRows: data.length,
+    });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json(
