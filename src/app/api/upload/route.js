@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 
 const prisma = new PrismaClient();
 
+const BATCH_SIZE = 50; // Process records in batches of 50
+
 export async function POST(req) {
   try {
     // Verify user is admin/manager
@@ -66,27 +68,49 @@ export async function POST(req) {
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = utils.sheet_to_json(worksheet);
 
+    // Validate the data structure first
+    const invalidRows = data.filter(
+      (row) => !row.voiceName || !row.AHT || !row.CSAT || !row.date
+    );
+    if (invalidRows.length > 0) {
+      return NextResponse.json(
+        {
+          error: "Invalid data format",
+          details: "Some rows are missing required fields",
+          invalidRows,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Get all unique voice names from the data
+    const uniqueVoiceNames = [...new Set(data.map((row) => row.voiceName))];
+
+    // Fetch all users with these voice names in one query
+    const users = await prisma.user.findMany({
+      where: {
+        voiceName: {
+          in: uniqueVoiceNames,
+        },
+      },
+    });
+
+    // Create a map for quick user lookup
+    const userMap = new Map(users.map((user) => [user.voiceName, user]));
+
     const results = {
       success: 0,
       skipped: 0,
       errors: [],
     };
 
-    // Process each row
-    for (const row of data) {
-      try {
-        // Validate required fields
-        if (!row.voiceName || !row.AHT || !row.CSAT || !row.date) {
-          results.errors.push(
-            `Missing required fields in row: ${JSON.stringify(row)}`
-          );
-          continue;
-        }
+    // Process data in batches
+    for (let i = 0; i < data.length; i += BATCH_SIZE) {
+      const batch = data.slice(i, i + BATCH_SIZE);
+      const batchOperations = [];
 
-        // Find user by voice name
-        const targetUser = await prisma.user.findUnique({
-          where: { voiceName: row.voiceName },
-        });
+      for (const row of batch) {
+        const targetUser = userMap.get(row.voiceName);
 
         if (!targetUser) {
           results.errors.push(
@@ -95,37 +119,42 @@ export async function POST(req) {
           continue;
         }
 
-        // Check for duplicate entry
-        const existingSurvey = await prisma.survey.findFirst({
-          where: {
-            userId: targetUser.id,
-            AHT: row.AHT,
-            CSAT: Number(row.CSAT),
-            date: new Date(row.date),
-            comment: row.comment || null,
-          },
-        });
-
-        if (existingSurvey) {
-          results.skipped++;
-          continue;
-        }
-
-        // Create new survey
-        await prisma.survey.create({
-          data: {
+        try {
+          // Prepare the survey data
+          const surveyData = {
             userId: targetUser.id,
             voiceName: row.voiceName,
             AHT: row.AHT,
             CSAT: Number(row.CSAT),
             date: new Date(row.date),
             comment: row.comment || null,
-          },
-        });
+          };
 
-        results.success++;
+          // Add operation to batch
+          batchOperations.push(
+            prisma.survey.upsert({
+              where: {
+                userId_date: {
+                  userId: targetUser.id,
+                  date: surveyData.date,
+                },
+              },
+              update: surveyData,
+              create: surveyData,
+            })
+          );
+        } catch (error) {
+          results.errors.push(`Error processing row: ${error.message}`);
+        }
+      }
+
+      // Execute batch operations
+      try {
+        const batchResults = await prisma.$transaction(batchOperations);
+        results.success += batchResults.length;
       } catch (error) {
-        results.errors.push(`Error processing row: ${error.message}`);
+        console.error("Batch processing error:", error);
+        results.errors.push(`Batch processing error: ${error.message}`);
       }
     }
 

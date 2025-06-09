@@ -48,17 +48,32 @@ const useSurveyStore = create((set, get) => ({
       const formData = new FormData();
       formData.append("file", file);
 
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 second timeout
+
       const response = await fetch("/api/upload", {
         method: "POST",
         body: formData,
+        signal: controller.signal,
       });
 
+      clearTimeout(timeoutId);
+
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Upload failed");
+        const errorData = await response.json().catch(() => ({
+          error: `HTTP error! status: ${response.status}`,
+        }));
+        throw new Error(
+          errorData.error || `Upload failed with status: ${response.status}`
+        );
       }
 
       const result = await response.json();
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
       set({ uploadStatus: result });
 
       // Refresh surveys after successful upload
@@ -66,8 +81,13 @@ const useSurveyStore = create((set, get) => ({
 
       return result;
     } catch (error) {
-      set({ error: error.message });
-      throw error;
+      const errorMessage =
+        error.name === "AbortError"
+          ? "Upload timed out. Please try with a smaller file or contact support."
+          : error.message;
+
+      set({ error: errorMessage });
+      throw new Error(errorMessage);
     } finally {
       set({ isLoading: false });
     }

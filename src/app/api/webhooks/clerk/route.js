@@ -14,13 +14,30 @@ async function handler(req) {
 
   // If there's no signature header, error out
   if (!svix_id || !svix_timestamp || !svix_signature) {
-    return new Response("Error occurred -- no svix headers", {
-      status: 400,
-    });
+    return new Response(
+      JSON.stringify({ error: "Missing required Svix headers" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
   }
 
   // Get the body
-  const payload = await req.json();
+  let payload;
+  try {
+    payload = await req.json();
+  } catch (error) {
+    console.error("Error parsing request body:", error);
+    return new Response(JSON.stringify({ error: "Invalid JSON payload" }), {
+      status: 400,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+  }
   const body = JSON.stringify(payload);
 
   // Create a new Svix instance with your webhook secret
@@ -37,9 +54,15 @@ async function handler(req) {
     });
   } catch (err) {
     console.error("Error verifying webhook:", err);
-    return new Response("Error occurred", {
-      status: 400,
-    });
+    return new Response(
+      JSON.stringify({ error: "Error verifying webhook signature" }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
   }
 
   // Handle the webhook
@@ -62,7 +85,12 @@ async function handler(req) {
       });
     } catch (error) {
       console.error("Error creating user:", error);
-      return new Response("Error creating user", { status: 500 });
+      return new Response(JSON.stringify({ error: "Error creating user" }), {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
     }
   }
 
@@ -102,7 +130,12 @@ async function handler(req) {
       }
     } catch (error) {
       console.error("Error updating user:", error);
-      return new Response("Error updating user", { status: 500 });
+      return new Response(JSON.stringify({ error: "Error updating user" }), {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
     }
   }
 
@@ -114,11 +147,21 @@ async function handler(req) {
       });
     } catch (error) {
       console.error("Error deleting user:", error);
-      return new Response("Error deleting user", { status: 500 });
+      return new Response(JSON.stringify({ error: "Error deleting user" }), {
+        status: 500,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
     }
   }
 
-  return new Response("Webhook processed successfully", { status: 200 });
+  return new Response(JSON.stringify({ success: true }), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
 }
 
 export { handler as POST };
