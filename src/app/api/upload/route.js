@@ -25,6 +25,10 @@ export async function POST(req) {
 
     const user = await prisma.user.findUnique({
       where: { clerkId: userId },
+      select: {
+        id: true,
+        role: true,
+      },
     });
 
     if (!user) {
@@ -69,15 +73,45 @@ export async function POST(req) {
     const worksheet = workbook.Sheets[workbook.SheetNames[0]];
     const data = utils.sheet_to_json(worksheet);
 
-    // Validate the data structure
-    const invalidRows = data.filter(
-      (row) => !row.voiceName || !row.AHT || !row.CSAT || !row.date
-    );
+    // Validate the data structure and types
+    const invalidRows = [];
+    data.forEach((row, index) => {
+      if (!row.voiceName || !row.AHT || row.CSAT === undefined || !row.date) {
+        invalidRows.push({
+          row: index + 2, // Add 2 to account for 1-based index and header row
+          error: "Missing required fields",
+          data: row,
+        });
+        return;
+      }
+
+      // Validate CSAT is a number between 1 and 5
+      const csatValue = parseFloat(row.CSAT);
+      if (isNaN(csatValue) || csatValue < 1 || csatValue > 5) {
+        invalidRows.push({
+          row: index + 2,
+          error: "CSAT must be a number between 1 and 5",
+          data: row,
+        });
+        return;
+      }
+
+      // Validate date format
+      const dateValue = new Date(row.date);
+      if (isNaN(dateValue.getTime())) {
+        invalidRows.push({
+          row: index + 2,
+          error: "Invalid date format",
+          data: row,
+        });
+      }
+    });
+
     if (invalidRows.length > 0) {
       return NextResponse.json(
         {
           error: "Invalid data format",
-          details: "Some rows are missing required fields",
+          details: "Some rows have invalid data",
           invalidRows: invalidRows.slice(0, 10), // Only show first 10 invalid rows
         },
         { status: 400 }
@@ -108,8 +142,24 @@ export async function POST(req) {
     });
   } catch (error) {
     console.error("Upload error:", error);
+
+    // Handle Prisma-specific errors
+    if (error.code === "P2002") {
+      return NextResponse.json(
+        {
+          error: "Duplicate entry found",
+          details: "Some records already exist in the database",
+        },
+        { status: 409 }
+      );
+    }
+
     return NextResponse.json(
-      { error: "Server error", details: error.message },
+      {
+        error: "Server error",
+        details: error.message,
+        code: error.code,
+      },
       { status: 500 }
     );
   }

@@ -31,12 +31,30 @@ async function processChunk(rows, userMap) {
     }
 
     try {
+      // Parse and validate CSAT value
+      const csatValue = parseFloat(row.CSAT);
+      if (isNaN(csatValue) || csatValue < 1 || csatValue > 5) {
+        errors.push(
+          `Invalid CSAT value for voice name ${row.voiceName}: ${row.CSAT}`
+        );
+        continue;
+      }
+
+      // Parse and validate date
+      const dateValue = new Date(row.date);
+      if (isNaN(dateValue.getTime())) {
+        errors.push(
+          `Invalid date format for voice name ${row.voiceName}: ${row.date}`
+        );
+        continue;
+      }
+
       const surveyData = {
         userId: targetUser.id,
         voiceName: row.voiceName,
         AHT: row.AHT,
-        CSAT: Number(row.CSAT),
-        date: new Date(row.date),
+        CSAT: csatValue,
+        date: dateValue,
         comment: row.comment || null,
       };
 
@@ -53,12 +71,19 @@ async function processChunk(rows, userMap) {
         })
       );
     } catch (error) {
-      errors.push(`Error processing row: ${error.message}`);
+      errors.push(
+        `Error processing row for voice name ${row.voiceName}: ${error.message}`
+      );
     }
   }
 
   if (operations.length > 0) {
-    await prisma.$transaction(operations);
+    try {
+      await prisma.$transaction(operations);
+    } catch (error) {
+      errors.push(`Batch operation error: ${error.message}`);
+      throw error; // Re-throw to be handled by the caller
+    }
   }
 
   return {
