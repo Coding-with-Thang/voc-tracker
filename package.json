@@ -2,6 +2,7 @@
   "name": "voc-tracker",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
@@ -9,7 +10,8 @@
     "generate": "dotenv -e env -- npx prisma generate",
     "postinstall": "prisma generate",
     "lint": "next lint",
-    "test:s3": "node -r dotenv/config src/scripts/test-s3.js"
+    "test:s3": "node -r dotenv/config src/scripts/test-s3.js",
+    "validate:excel": "node src/scripts/test-upload.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.0.0",

@@ -45,6 +45,11 @@ const useSurveyStore = create((set, get) => ({
     try {
       set({ isLoading: true, error: null, uploadStatus: null });
 
+      // Validate file type
+      if (!file.name.match(/\.(xlsx|xls)$/)) {
+        throw new Error("Please upload an Excel file (.xlsx or .xls)");
+      }
+
       const formData = new FormData();
       formData.append("file", file);
 
@@ -59,16 +64,27 @@ const useSurveyStore = create((set, get) => ({
 
       clearTimeout(timeoutId);
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({
-          error: `HTTP error! status: ${response.status}`,
-        }));
-        throw new Error(
-          errorData.error || `Upload failed with status: ${response.status}`
-        );
-      }
-
       const result = await response.json();
+
+      if (!response.ok) {
+        // Enhanced error handling with detailed information
+        const errorMessage = result.details
+          ? `${result.error}: ${result.details}`
+          : result.error;
+
+        if (result.invalidRows) {
+          const rowErrors = result.invalidRows
+            .map(
+              (row) =>
+                `Row ${row.row}: ${row.error} ${JSON.stringify(row.data)}`
+            )
+            .join("\n");
+
+          throw new Error(`${errorMessage}\n\nProblematic rows:\n${rowErrors}`);
+        }
+
+        throw new Error(errorMessage);
+      }
 
       if (result.error) {
         throw new Error(result.error);
@@ -81,13 +97,20 @@ const useSurveyStore = create((set, get) => ({
 
       return result;
     } catch (error) {
-      const errorMessage =
+      let errorMessage =
         error.name === "AbortError"
           ? "Upload timed out. Please try with a smaller file or contact support."
           : error.message;
 
+      // Log the full error for debugging
+      console.error("Upload error details:", {
+        message: error.message,
+        name: error.name,
+        stack: error.stack,
+      });
+
       set({ error: errorMessage });
-      throw new Error(errorMessage);
+      throw error;
     } finally {
       set({ isLoading: false });
     }

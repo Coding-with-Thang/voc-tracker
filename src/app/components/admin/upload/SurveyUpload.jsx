@@ -1,9 +1,11 @@
 'use client';
 
 import useSurveyStore from '../../../store/surveyStore';
+import { useRef } from 'react';
 
 function SurveyUpload() {
   const { uploadSurveys, isLoading, error, uploadStatus, clearUploadStatus } = useSurveyStore();
+  const fileInputRef = useRef(null);
 
   const handleFileUpload = async (event) => {
     const file = event.target.files?.[0];
@@ -23,6 +25,13 @@ function SurveyUpload() {
     }
   };
 
+  const handleClear = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    clearUploadStatus();
+  };
+
   return (
     <div className="p-6 max-w-2xl mx-auto">
       <div className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
@@ -32,13 +41,23 @@ function SurveyUpload() {
           <label className="block text-gray-700 text-sm font-bold mb-2">
             Select Excel File
           </label>
-          <input
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileUpload}
-            disabled={isLoading}
-            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-          />
+          <div className="flex gap-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileUpload}
+              disabled={isLoading}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            />
+            <button
+              onClick={handleClear}
+              disabled={isLoading}
+              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+            >
+              Clear
+            </button>
+          </div>
           <p className="text-sm text-gray-500 mt-2">
             Accepted formats: .xlsx, .xls
           </p>
